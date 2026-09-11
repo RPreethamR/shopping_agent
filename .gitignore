@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# extra files
+agent_with_memory
+evals
+guardrails
+health_analysis
+llm_calling
+multiModal
+rag_basics
+shopping_agent
+single_agent
+streamlit_app
+vector_db
+.env
