@@ -5,6 +5,21 @@ import streamlit as st
 
 from shopping_agent import agent
 
+
+def agent_messages():
+    """Build the message list for the agent: a system message telling it which
+    user_id to use, followed by the visible chat history. The system message is
+    NOT stored in st.session_state.messages, so it never shows up in the chat."""
+    system_msg = {
+        "role": "system",
+        "content": (
+            f"The current user's user_id is '{st.session_state.get('user_id', 'guest')}'. "
+            "Use this exact user_id for any tool that needs one."
+        ),
+    }
+    return [system_msg] + st.session_state.messages
+
+
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
@@ -17,6 +32,17 @@ st.caption("Tell me what you want — I'll search, rate, and order the best matc
 # Sidebar — shop by image
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    st.header("Your profile")
+    user_name = st.text_input(
+        "Your name",
+        value="guest",
+        help="Used to remember your orders and preferences across sessions.",
+    )
+    st.session_state.user_id = (user_name or "guest").strip().lower() or "guest"
+    st.caption(f"Shopping as: {st.session_state.user_id}")
+
+    st.divider()
+
     st.header("Shop by Image")
     st.caption("Upload a photo of a product and I'll find similar items in our store.")
 
@@ -63,7 +89,7 @@ if (
 ):
     with st.chat_message("assistant"):
         with st.spinner("Analyzing image and searching…"):
-            result = agent.invoke({"messages": st.session_state.messages})
+            result = agent.invoke({"messages": agent_messages()})
             response = result["messages"][-1].content.replace("`", "")
         st.markdown(response.replace("$", r"\$"))
 
@@ -81,7 +107,7 @@ if prompt := st.chat_input("e.g. I want organic honey under $15 with 4+ rating")
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
-            result = agent.invoke({"messages": st.session_state.messages})
+            result = agent.invoke({"messages": agent_messages()})
             response = result["messages"][-1].content.replace("`", "")
         st.markdown(response.replace("$", r"\$"))
 

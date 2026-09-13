@@ -21,4 +21,5 @@ shopping_agent
 single_agent
 streamlit_app
 vector_db
+telecom_RAG
 .env
