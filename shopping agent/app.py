@@ -3,7 +3,7 @@ import tempfile
 
 import streamlit as st
 
-from shopping_agent import agent
+from shopping_agent import agent, check_input_guardrail
 
 
 def agent_messages():
@@ -106,9 +106,15 @@ if prompt := st.chat_input("e.g. I want organic honey under $15 with 4+ rating")
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking…"):
-            result = agent.invoke({"messages": agent_messages()})
-            response = result["messages"][-1].content.replace("`", "")
+        # Input guardrail: if the message isn't shopping-related, reply with a
+        # polite redirect and skip the (expensive) agent run entirely.
+        redirect = check_input_guardrail(prompt)
+        if redirect:
+            response = redirect
+        else:
+            with st.spinner("Thinking…"):
+                result = agent.invoke({"messages": agent_messages()})
+                response = result["messages"][-1].content.replace("`", "")
         st.markdown(response.replace("$", r"\$"))
 
     st.session_state.messages.append({"role": "assistant", "content": response})

@@ -22,4 +22,5 @@ single_agent
 streamlit_app
 vector_db
 telecom_RAG
+LEARNING_LOG.md
 .env

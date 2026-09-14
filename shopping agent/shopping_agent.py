@@ -27,6 +27,11 @@ llm = ChatGroq(
 vision_llm = ChatGroq(
     model="qwen/qwen3.6-27b", temperature=0, max_tokens=512, reasoning_effort="none"
 )
+# A tiny model used only by the input guardrail. It answers a single word
+# (SHOPPING / OFF_TOPIC), so max_tokens is very small to stay cheap.
+guardrail_llm = ChatGroq(
+    model="qwen/qwen3.6-27b", temperature=0, max_tokens=8, reasoning_effort="none"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +60,67 @@ def _coerce_float(value) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Input guardrail — runs BEFORE the agent to reject off-topic messages
+# (e.g. "write me a poem", "what's the weather") with a polite redirect, so we
+# don't spend a full multi-step agent turn on something unrelated to shopping.
+# ---------------------------------------------------------------------------
+
+GUARDRAIL_REDIRECT = (
+    "I'm your shopping assistant, so I can only help with shopping — finding "
+    "products, checking ratings, placing orders, and your order history or "
+    "preferences. What would you like to shop for today?"
+)
+
+# Common one-word/short confirmations we let straight through without a model
+# call. In an ongoing chat these are follow-ups (e.g. answering "order it?"),
+# and classifying them in isolation would be wasteful and error-prone.
+_FOLLOWUP_OK = {
+    "yes", "y", "yeah", "yep", "yup", "sure", "ok", "okay", "no", "nope",
+    "confirm", "buy it", "order it", "go ahead", "sounds good",
+}
+
+
+def check_input_guardrail(message: str) -> Optional[str]:
+    """Decide whether `message` is shopping-related.
+
+    Returns None if the message is on-topic (let the agent handle it), or a
+    polite redirect string if it is off-topic (skip the agent). Uses one cheap
+    one-word LLM classification. Fails OPEN: if the verdict is unclear, we allow
+    the message through rather than wrongly blocking a real request.
+    """
+    text = (message or "").strip()
+    if not text:
+        return None
+
+    # Fast path: short confirmations/replies that continue a shopping chat.
+    normalized = text.lower().rstrip(".!?")
+    if normalized in _FOLLOWUP_OK or normalized.startswith(("#", "order #")):
+        return None
+
+    system = (
+        "You are a strict input filter for an online grocery/product shopping "
+        "assistant. Decide if the user's message belongs to shopping: searching "
+        "for products, prices, ratings, placing or reviewing orders, order "
+        "history, or shopping preferences. Greetings and brief replies that could "
+        "continue a shopping chat count as shopping. Anything unrelated (poems, "
+        "weather, coding help, general trivia, etc.) is off-topic.\n"
+        "Answer with EXACTLY one word: SHOPPING or OFF_TOPIC."
+    )
+    response = guardrail_llm.invoke(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": text},
+        ]
+    )
+    verdict = (response.content or "").strip().upper()
+
+    # Fail open: only block when the model clearly says OFF_TOPIC.
+    if "OFF_TOPIC" in verdict:
+        return GUARDRAIL_REDIRECT
+    return None
 
 
 # ---------------------------------------------------------------------------
